@@ -55,8 +55,8 @@ def MLP(channels: list, do_bn=True):
             nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
         if i < (n-1):
             if do_bn:
-                # layers.append(nn.BatchNorm1d(channels[i]))
-                layers.append(nn.InstanceNorm1d(channels[i]))
+                layers.append(nn.BatchNorm1d(channels[i]))
+                #layers.append(nn.InstanceNorm1d(channels[i]))
             layers.append(nn.ReLU())
     return nn.Sequential(*layers)
 
@@ -79,7 +79,9 @@ class KeypointEncoder(nn.Module):
         nn.init.constant_(self.encoder[-1].bias, 0.0)
 
     def forward(self, kpts, scores):
-        inputs = [kpts.transpose(1, 2), scores.unsqueeze(1)]
+        #inputs = [kpts.transpose(1, 2), scores.unsqueeze(1)]
+        inputs = [kpts.transpose(1, 2), scores.reshape(scores.shape[0], 1, scores.shape[1])]
+        res = self.encoder(torch.cat(inputs, dim=1))
         return self.encoder(torch.cat(inputs, dim=1))
 
 
@@ -196,9 +198,9 @@ class SuperGlue(nn.Module):
 
     """
     default_config = {
-        'descriptor_dim': 128,
+        'descriptor_dim': 256,
         'weights': 'indoor',
-        'keypoint_encoder': [32, 64, 128],
+        'keypoint_encoder': [32, 64, 128, 256],
         'GNN_layers': ['self', 'cross'] * 9,
         'sinkhorn_iterations': 100,
         'match_threshold': 0.2,
@@ -207,6 +209,8 @@ class SuperGlue(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = {**self.default_config, **config}
+
+        print('train config : ', self.config)
 
         self.kenc = KeypointEncoder(
             self.config['descriptor_dim'], self.config['keypoint_encoder'])
@@ -233,10 +237,12 @@ class SuperGlue(nn.Module):
         desc0, desc1 = data['descriptors0'].double(), data['descriptors1'].double()
         kpts0, kpts1 = data['keypoints0'].double(), data['keypoints1'].double()
 
-        desc0 = desc0.transpose(0,1)
-        desc1 = desc1.transpose(0,1)
-        kpts0 = torch.reshape(kpts0, (1, -1, 2))
-        kpts1 = torch.reshape(kpts1, (1, -1, 2))
+        #desc0 = desc0.transpose(0,1)
+        #desc1 = desc1.transpose(0,1)
+        #kpts0 = kpts0[0]
+        #kpts1 = kpts1[0]
+        #kpts0 = torch.reshape(kpts0, (1, -1, 2))
+        #kpts1 = torch.reshape(kpts1, (1, -1, 2))
     
         if kpts0.shape[1] == 0 or kpts1.shape[1] == 0:  # no keypoints
             shape0, shape1 = kpts0.shape[:-1], kpts1.shape[:-1]
@@ -245,19 +251,20 @@ class SuperGlue(nn.Module):
                 'matches1': kpts1.new_full(shape1, -1, dtype=torch.int)[0],
                 'matching_scores0': kpts0.new_zeros(shape0)[0],
                 'matching_scores1': kpts1.new_zeros(shape1)[0],
-                'skip_train': True
+                'skip_train': torch.empty(1).cuda()
             }
 
         file_name = data['file_name']
-        all_matches = data['all_matches'].permute(1,2,0) # shape=torch.Size([1, 87, 2])
+        #all_matches = data['all_matches'].permute(1,2,0) # shape=torch.Size([1, 87, 2])
+        all_matches = data['all_matches'].permute(0,2,1) # shape=torch.Size([1, 87, 2])
         
         # Keypoint normalization.
         kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
         kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
 
         # Keypoint MLP encoder.
-        desc0 = desc0 + self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
-        desc1 = desc1 + self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
+        desc0 = desc0 + self.kenc(kpts0, data['scores0'])
+        desc1 = desc1 + self.kenc(kpts1, data['scores1'])
 
         # Multi-layer Transformer network.
         desc0, desc1 = self.gnn(desc0, desc1)
@@ -293,6 +300,7 @@ class SuperGlue(nn.Module):
             x = all_matches[0][i][0]
             y = all_matches[0][i][1]
             loss.append(-torch.log( scores[0][x][y].exp() )) # check batch size == 1 ?
+
         # for p0 in unmatched0:
         #     loss += -torch.log(scores[0][p0][-1])
         # for p1 in unmatched1:
@@ -305,7 +313,7 @@ class SuperGlue(nn.Module):
             'matching_scores0': mscores0[0],
             'matching_scores1': mscores1[0],
             'loss': loss_mean[0],
-            'skip_train': False
+            'skip_train': torch.empty(0).cuda()
         }
 
         # scores big value or small value means confidence? log can't take neg value

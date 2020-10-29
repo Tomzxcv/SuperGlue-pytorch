@@ -46,6 +46,7 @@ class SparseDataset(Dataset):
 
         kp1_num = min(self.nfeatures, len(kp1))
         kp2_num = min(self.nfeatures, len(kp2))
+        #print('kpt numbers : ', kp1_num, kp2_num)
         kp1 = kp1[:kp1_num]
         kp2 = kp2[:kp2_num]
 
