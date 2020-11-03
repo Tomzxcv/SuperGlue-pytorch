@@ -95,12 +95,15 @@ class SparseDataset_SP(Dataset):
                 rand = np.concatenate((rand_x, rand_y), axis=1)
                 kp1_np = np.concatenate((kp1_np, rand), axis=0)
                 #descs
-                desc = np.random.randint(0, 10000, size=(256, self.nfeatures - kp1_num)).astype(np.float32)
+                desc = np.random.randint(1, 10000, size=(256, self.nfeatures - kp1_num)).astype(np.float32)
                 row_sums = desc.sum(axis=1)
+                desc = desc / row_sums[:, np.newaxis]
+                '''
                 if not row_sums[:, np.newaxis].any() < 0.001:
                     desc = desc / row_sums[:, np.newaxis]
                 else:
                     print('desc is : ', row_sums[:, np.newaxis])
+                '''
                 descs1 = np.concatenate((descs1, desc), axis=1)
                 #scores
                 scores1_np.resize(self.nfeatures)
@@ -112,12 +115,15 @@ class SparseDataset_SP(Dataset):
                 rand = np.concatenate((rand_x, rand_y), axis=1)
                 kp2_np = np.concatenate((kp2_np, rand), axis=0)
                 #descs
-                desc = np.random.randint(0, 10000, size=(256, self.nfeatures - kp2_num)).astype(np.float32)
+                desc = np.random.randint(1, 10000, size=(256, self.nfeatures - kp2_num)).astype(np.float32)
                 row_sums = desc.sum(axis=1)
+                desc = desc / row_sums[:, np.newaxis]
+                '''
                 if not row_sums[:, np.newaxis].any() < 0.001:
                     desc = desc / row_sums[:, np.newaxis]
                 else:
                     print('desc is : ', row_sums[:, np.newaxis])
+                '''
                 descs2 = np.concatenate((descs2, desc), axis=1)
                 #scores
                 scores2_np.resize(self.nfeatures)
